@@ -16,6 +16,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -fexceptions")
+# Ubuntu's system PCL 1.14 is built with Eigen 16-byte alignment (EIGEN_MAX_ALIGN_BYTES=16).
+# On AVX2/AVX512 CPUs Eigen's default is 32/64 bytes, which changes both the
+# aligned_allocator's malloc header convention and PCL object layouts (e.g. VoxelGrid)
+# relative to libpcl -> crashes in pcl::VoxelGrid/PointCloud destruction at runtime.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_MAX_ALIGN_BYTES=16")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 ${CMAKE_CXX_FLAGS}")
 if(LEGKILO_MARCH_NATIVE)
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
@@ -98,6 +103,7 @@ else()
   find_package(pcl_conversions REQUIRED)
   find_package(unitree_legged_msgs REQUIRED)
   find_package(livox_ros_driver2 REQUIRED)
+  find_package(robotdata REQUIRED)
 endif()
 
 set(CORE_SOURCES
@@ -170,6 +176,7 @@ else()
 	      pcl_conversions
 	      unitree_legged_msgs
 	      livox_ros_driver2
+        robotdata
 	  )
 endif()
 

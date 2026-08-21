@@ -21,6 +21,8 @@
 #include "interface/common/options.h"
 #include "interface/common/ros_compat.h"
 
+#include "robotdata/msg/robot_state.hpp"
+
 namespace legkilo {
 class Kinematics;
 class LidarProcessing;
@@ -58,7 +60,8 @@ class RosInterface {
     void lidarCallBack(ros_compat::PointCloud2MsgConstPtr msg);
     void livoxLidarCallBack(ros_compat::LivoxCustomMsgConstPtr msg);
     void imuCallBack(ros_compat::ImuMsgConstPtr msg);
-    void kinematicImuCallBack(ros_compat::HighStateMsgConstPtr msg);
+    void kinematicImuCallBack(const robotdata::msg::RobotState::ConstSharedPtr& msg);
+    // void kinematicImuCallBack(ros_compat::HighStateMsgConstPtr msg);
     bool syncPackage();
     void publishOdomTFPath(double end_time, const Eigen::Vector3d& pos, const Eigen::Matrix3d& rot);
     void publishPointcloudWorld(double end_time, const CloudPtr& cloud_world);
@@ -71,7 +74,7 @@ class RosInterface {
     rclcpp::Subscription<ros_compat::PointCloud2Msg>::SharedPtr sub_lidar_raw_;
     rclcpp::Subscription<ros_compat::LivoxCustomMsg>::SharedPtr sub_livox_lidar_raw_;
     rclcpp::Subscription<ros_compat::ImuMsg>::SharedPtr sub_imu_raw_;
-    rclcpp::Subscription<ros_compat::HighStateMsg>::SharedPtr sub_kinematic_raw_;
+    rclcpp::Subscription<robotdata::msg::RobotState>::SharedPtr sub_kinematic_raw_;
     std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> lidar_executor_;
     std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> imu_executor_;
     std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> kinematic_executor_;

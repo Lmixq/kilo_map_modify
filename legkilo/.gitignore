@@ -1,3 +1,4 @@
 logs/*
+result/*
 !logs/.gitignore
 package/tbb2018_20170726oss_lin

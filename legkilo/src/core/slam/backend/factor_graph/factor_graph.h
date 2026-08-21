@@ -60,7 +60,10 @@ class FactorGraph {
     double loopclosure_trans_sigma_multiplier_ = 10.0;
     double loopclosure_rot_sigma_multiplier_ = 4.0;
     double loopclosure_loss_scale_ = 3.0;
-    ceres::LinearSolverType linear_solver_type_ = ceres::SPARSE_NORMAL_CHOLESKY;
+    // DENSE_QR instead of SPARSE_NORMAL_CHOLESKY: the hand-built static ceres 2.1.0
+    // (EIGENSPARSE backend) hits a bad-free with system Eigen 3.4 + -march=native (AVX512),
+    // crashing the node in FactorGraph::optimize(). The pose graph is tiny, dense QR is fast and robust.
+    ceres::LinearSolverType linear_solver_type_ = ceres::DENSE_QR;
 };
 
 }  // namespace legkilo

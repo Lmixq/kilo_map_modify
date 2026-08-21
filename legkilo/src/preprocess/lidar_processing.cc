@@ -6,6 +6,10 @@ LidarProcessing::LidarProcessing(LidarProcessing::Config config) : config_(confi
     cloud_pcl_.reset(new PointCloudType());
     min_range2_ = config_.min_range_ * config_.min_range_;
     max_range2_ = config_.max_range_ * config_.max_range_;
+
+    trans << 0.0101165, 0.770589,   0.637252,
+            -0.999554, -0.0101165,  0.0281012,
+            0.0281012, -0.637252,   0.770143;
 }
 
 LidarProcessing::~LidarProcessing() { LOG(INFO) << "Lidar Processing is Destructed"; }
@@ -191,15 +195,19 @@ void LidarProcessing::livoxHandler(const ros_compat::LivoxCustomMsgConstPtr& msg
     lidar_scan.cloud_.reset(new PointCloudType());
 
     const auto& points = msg->points;
-    const double timebase = ros_compat::toSec(msg->header.stamp);
+    // const double timebase = ros_compat::toSec(msg->header.stamp);
+    const double timebase = rclcpp::Clock().now().seconds();
 
     auto [min_it, max_it] = std::minmax_element(
         points.begin(), points.end(), [](const ros_compat::LivoxCustomPoint& a, const ros_compat::LivoxCustomPoint& b) {
             return a.offset_time < b.offset_time;
         });
 
-    double first_point_time = config_.time_scale_ * min_it->offset_time;
-    double last_point_time = config_.time_scale_ * max_it->offset_time;
+    // double first_point_time = config_.time_scale_ * min_it->offset_time;
+    // double last_point_time = config_.time_scale_ * max_it->offset_time;
+
+    float first_point_time = msg->points.front().offset_time / float(1000000000);
+    float last_point_time = msg->points.back().offset_time / float(1000000000);
 
     lidar_scan.lidar_begin_time_ = timebase + first_point_time;
     lidar_scan.lidar_end_time_ = timebase + last_point_time;
@@ -214,9 +222,11 @@ void LidarProcessing::livoxHandler(const ros_compat::LivoxCustomMsgConstPtr& msg
         if (nanCheck(pt)) continue;
 
         PointType added_point;
-        added_point.x = pt.x;
-        added_point.y = pt.y;
-        added_point.z = pt.z;
+        Eigen::Vector3d p(pt.x, pt.y, pt.z);
+        p = trans * p;
+        added_point.x = static_cast<float>(p.x());
+        added_point.y = static_cast<float>(p.y());
+        added_point.z = static_cast<float>(p.z());
         added_point.intensity = static_cast<float>(pt.reflectivity);
         double cur_point_time = config_.time_scale_ * pt.offset_time;
         added_point.curvature = std::round((cur_point_time - first_point_time) * 500.0) / 500.0;

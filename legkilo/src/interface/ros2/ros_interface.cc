@@ -12,6 +12,7 @@
 #include "preprocess/lidar_processing.h"
 #include "viewer/viewer_slam_interface.h"
 
+#include <pcl/filters/voxel_grid.h>
 namespace legkilo {
 
 namespace {
@@ -136,9 +137,12 @@ void RosInterface::subscribeKinematicImu() {
     using std::placeholders::_1;
     kinematic_node_ = createSubscriptionNode(node_, std::string(node_->get_name()) + "_kinematic_sub");
     kinematic_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-    const auto kinematic_qos = createReliableSubscriptionQos(2048);
-    sub_kinematic_raw_ = kinematic_node_->create_subscription<ros_compat::HighStateMsg>(
+    // const auto kinematic_qos = createReliableSubscriptionQos(2048);
+    auto kinematic_qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
+    sub_kinematic_raw_ = kinematic_node_->create_subscription<robotdata::msg::RobotState>(
         options::kKinematicTopic, kinematic_qos, std::bind(&RosInterface::kinematicImuCallBack, this, _1));
+    // sub_kinematic_raw_ = kinematic_node_->create_subscription<ros_compat::HighStateMsg>(
+    //     options::kKinematicTopic, kinematic_qos, std::bind(&RosInterface::kinematicImuCallBack, this, _1));
     kinematic_executor_->add_node(kinematic_node_);
     kinematic_thread_ = std::make_unique<std::thread>(&RosInterface::kinematicImuLoop, this);
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -274,19 +278,22 @@ void RosInterface::imuCallBack(ros_compat::ImuMsgConstPtr msg) {
     }
 }
 
-void RosInterface::kinematicImuCallBack(ros_compat::HighStateMsgConstPtr msg) {
-    static ros_compat::HighStateMsg last_highstate_msg;
-    ros_compat::HighStateMsgPtr highstate_msg(new ros_compat::HighStateMsg(*msg));
+void RosInterface::kinematicImuCallBack(const robotdata::msg::RobotState::ConstSharedPtr& msg) {
+    static robotdata::msg::RobotState last_lowstate_msg;
+    robotdata::msg::RobotState lowstate_msg;
+    lowstate_msg = *msg; 
+    
+    double timestamp = rclcpp::Clock().now().seconds();
 
     if (options::kRedundancy) {
-        if (highstate_msg->imu.accelerometer[2] == last_highstate_msg.imu.accelerometer[2] &&
-            highstate_msg->imu.gyroscope[2] == last_highstate_msg.imu.gyroscope[2]) {
-            last_highstate_msg = *highstate_msg;
+        if (lowstate_msg.imu.acc[2] == last_lowstate_msg.imu.acc[2] &&
+            lowstate_msg.imu.gry[2] == last_lowstate_msg.imu.gry[2]) {
+            last_lowstate_msg = lowstate_msg;
+            last_timestamp_kin_imu_ = timestamp;  // 冗余过滤仍需更新时间戳，否则 syncPackage 卡死
             return;
         }
     }
 
-    const double timestamp = ros_compat::toSec(highstate_msg->stamp);
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (timestamp < last_timestamp_kin_imu_) {
@@ -295,10 +302,12 @@ void RosInterface::kinematicImuCallBack(ros_compat::HighStateMsgConstPtr msg) {
         }
 
         common::KinImuMeas kin_imu_meas;
-        kinematics_->processing(*highstate_msg, kin_imu_meas);
+
+        kinematics_->processing(lowstate_msg, kin_imu_meas);
+
         kin_imu_cache_.push_back(kin_imu_meas);
         last_timestamp_kin_imu_ = timestamp;
-        last_highstate_msg = *highstate_msg;
+        last_lowstate_msg = lowstate_msg;
     }
 
     if (pub_joint_tf_enable_ && pub_joint_state_) {
@@ -306,20 +315,66 @@ void RosInterface::kinematicImuCallBack(ros_compat::HighStateMsgConstPtr msg) {
             "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint", "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
             "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint", "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint"};
         ros_compat::JointStateMsg joint_state;
-        joint_state.header.stamp = last_highstate_msg.stamp;
+        joint_state.header.stamp = rclcpp::Clock().now();
         joint_state.name = joint_names;
-        const auto& motor = ros_compat::motorStates(last_highstate_msg);
-        joint_state.position = {
-            motor[0].q, motor[1].q, motor[2].q, motor[3].q, motor[4].q,  motor[5].q,
-            motor[6].q, motor[7].q, motor[8].q, motor[9].q, motor[10].q, motor[11].q,
-        };
-        joint_state.velocity = {
-            motor[0].dq, motor[1].dq, motor[2].dq, motor[3].dq, motor[4].dq,  motor[5].dq,
-            motor[6].dq, motor[7].dq, motor[8].dq, motor[9].dq, motor[10].dq, motor[11].dq,
-        };
+        const auto& motor = last_lowstate_msg.motors;
+        joint_state.position.resize(12);
+        joint_state.velocity.resize(12);
+        for (int i = 0; i < 12; ++i) {
+            joint_state.position[i] = motor[i].q;
+            joint_state.velocity[i] = motor[i].qd;
+        }
         pub_joint_state_->publish(joint_state);
     }
 }
+
+
+// void RosInterface::kinematicImuCallBack(ros_compat::HighStateMsgConstPtr msg) {
+//     static ros_compat::HighStateMsg last_highstate_msg;
+//     ros_compat::HighStateMsgPtr highstate_msg(new ros_compat::HighStateMsg(*msg));
+
+//     if (options::kRedundancy) {
+//         if (highstate_msg->imu.accelerometer[2] == last_highstate_msg.imu.accelerometer[2] &&
+//             highstate_msg->imu.gyroscope[2] == last_highstate_msg.imu.gyroscope[2]) {
+//             last_highstate_msg = *highstate_msg;
+//             return;
+//         }
+//     }
+
+//     const double timestamp = ros_compat::toSec(highstate_msg->stamp);
+//     {
+//         std::lock_guard<std::mutex> lock(mutex_);
+//         if (timestamp < last_timestamp_kin_imu_) {
+//             LOG(WARNING) << "Time inconsistency detected in Kin. Imu data stream";
+//             kin_imu_cache_.clear();
+//         }
+
+//         common::KinImuMeas kin_imu_meas;
+//         kinematics_->processing(*highstate_msg, kin_imu_meas);
+//         kin_imu_cache_.push_back(kin_imu_meas);
+//         last_timestamp_kin_imu_ = timestamp;
+//         last_highstate_msg = *highstate_msg;
+//     }
+
+//     if (pub_joint_tf_enable_ && pub_joint_state_) {
+//         static std::vector<std::string> joint_names = {
+//             "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint", "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
+//             "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint", "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint"};
+//         ros_compat::JointStateMsg joint_state;
+//         joint_state.header.stamp = last_highstate_msg.stamp;
+//         joint_state.name = joint_names;
+//         const auto& motor = ros_compat::motorStates(last_highstate_msg);
+//         joint_state.position = {
+//             motor[0].q, motor[1].q, motor[2].q, motor[3].q, motor[4].q,  motor[5].q,
+//             motor[6].q, motor[7].q, motor[8].q, motor[9].q, motor[10].q, motor[11].q,
+//         };
+//         joint_state.velocity = {
+//             motor[0].dq, motor[1].dq, motor[2].dq, motor[3].dq, motor[4].dq,  motor[5].dq,
+//             motor[6].dq, motor[7].dq, motor[8].dq, motor[9].dq, motor[10].dq, motor[11].dq,
+//         };
+//         pub_joint_state_->publish(joint_state);
+//     }
+// }
 
 bool RosInterface::syncPackage() {
     static bool lidar_push_ = false;
@@ -434,7 +489,15 @@ void RosInterface::publishOdomTFPath(const double end_time, const Eigen::Vector3
 void RosInterface::publishPointcloudWorld(const double end_time, const CloudPtr& cloud_world) {
     if (!cloud_world) return;
     ros_compat::PointCloud2Msg pcl_msg;
-    pcl::toROSMsg(*cloud_world, pcl_msg);
+
+    pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_copy(new pcl::PointCloud<pcl::PointXYZINormal>(*cloud_world));
+    pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZINormal>());
+    pcl::VoxelGrid<pcl::PointXYZINormal> sor;
+    sor.setInputCloud(cloud_copy);
+    sor.setLeafSize(0.1f, 0.1f, 0.1f);
+    sor.filter(*cloud_filtered);
+    
+    pcl::toROSMsg(*cloud_filtered, pcl_msg);
     pcl_msg.header.stamp = ros_compat::fromSec(end_time);
     pcl_msg.header.frame_id = "camera_init";
     pub_pointcloud_world_->publish(pcl_msg);

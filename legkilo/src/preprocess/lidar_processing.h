@@ -140,6 +140,8 @@ class LidarProcessing {
     float min_range2_ = 1.0f;
     float max_range2_ = 10000.0f;
     Config config_;
+
+    Eigen::Matrix3d trans;
 };
 
 }  // namespace legkilo

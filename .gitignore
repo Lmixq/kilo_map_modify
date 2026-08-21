@@ -5,6 +5,7 @@ FEATURE.md
 log/
 
 legkilo/result/*
+legkilo/logs/*
 legkilo/result/traj/*
 !legkilo/result/traj/.gitignore
 legkilo/result/PCD/*

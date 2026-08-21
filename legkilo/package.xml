@@ -25,6 +25,7 @@
   <depend>unitree_legged_msgs</depend>
   <depend>livox_ros_driver</depend>
   <depend>livox_ros_driver2</depend>
+  <depend>robotdata</depend>
 
   <depend condition="$ROS_VERSION == 1">roscpp</depend>
   <depend condition="$ROS_VERSION == 1">tf</depend>

@@ -9,6 +9,7 @@
 
 #include "common/sensor_types.hpp"
 #include "interface/common/ros_compat.h"
+#include "robotdata/msg/robot_state.hpp"
 
 namespace legkilo {
 
@@ -48,7 +49,8 @@ class Kinematics {
           contacts_(std::vector<ContactDetector>(
               4, ContactDetector(config.contact_force_threshold_up, config.contact_force_threshold_down))) {}
 
-    void processing(const ros_compat::HighStateMsg& high_state, common::KinImuMeas& kin_imu_meas);
+    // void processing(const ros_compat::HighStateMsg& high_state, common::KinImuMeas& kin_imu_meas);
+    void processing(const robotdata::msg::RobotState& low_state, common::KinImuMeas& kin_imu_meas);
 
    private:
     void caculateFootPosVel(const double (&foot_angle)[4][3], const double (&foot_angle_vel)[4][3],
