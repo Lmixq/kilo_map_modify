@@ -6,6 +6,7 @@ namespace options {
 common::SensorType kSensorType = common::SensorType::LIO;
 std::atomic_bool FLAG_EXIT{false};
 bool kRedundancy = false;
+bool initialize_flag = false;
 
 std::string kLidarTopic;
 std::string kKinematicTopic;

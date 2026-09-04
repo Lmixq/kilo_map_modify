@@ -34,6 +34,12 @@ void LidarProcessing::processing(const ros_compat::LivoxCustomMsgConstPtr& msg, 
     livoxHandler(msg, lidar_scan);
 }
 
+void LidarProcessing::updateExtrinsics(const Eigen::Matrix3d& R) {
+    Eigen::Matrix3d z_rot = Eigen::AngleAxisd(-M_PI/2, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+    trans = z_rot * R;
+    std::cout << "Lidar extrinsics updated: \n" << trans << std::endl;
+}
+
 void LidarProcessing::velodyneHandler(const ros_compat::PointCloud2MsgConstPtr& msg, common::LidarScan& lidar_scan) {
     lidar_scan.cloud_.reset(new PointCloudType());
 

@@ -9,7 +9,8 @@ redundancy: true                  ## set true for legkilo dataset (imu/kin publi
 
 # Initialization (Require stationary state at the beginning)
 gravity: 9.81 
-init_type: 1                      ## 1: Identity (R=I, g from mean acc); 2: GravityAlignment (R aligns acc to world gravity, g=[0,0,-G])
+init_type: 1                      ## 1: Identity (R=I, g from mean acc); 2: GravityAlignment (R aligns acc to world gravity, g=[0,0,-G]))
+initialize_flag: true                  ## whether to initialize the extrincs between lidar and body (require stationary state at the beginning)
 
 # Extrinsic: rigid body transform from LiDAR frame to IMU frame (T_I_L)
 # meaning: LiDAR coordinate system expressed in IMU coordinate system

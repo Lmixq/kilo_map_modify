@@ -10,6 +10,7 @@
 #include "core/slam/frontend/KILO.h"
 #include "preprocess/kinematics.h"
 #include "preprocess/lidar_processing.h"
+#include "preprocess/imu_processing.h"
 #include "viewer/viewer_slam_interface.h"
 
 #include <pcl/filters/voxel_grid.h>
@@ -51,10 +52,11 @@ bool RosInterface::initParamAndReset(const std::string& config_file) {
 
     options::FLAG_EXIT.store(false);
 
+    options::initialize_flag = yaml_helper.get<bool>("initialize_flag", false);
     options::kLidarTopic = yaml_helper.get<std::string>("lidar_topic");
     options::kSensorType = common::parseSensorType(yaml_helper.get<std::string>("sensor_type"));
     options::kRedundancy = yaml_helper.get<bool>("redundancy", false);
-    if (options::useImu()) { options::kImuTopic = yaml_helper.get<std::string>("imu_topic"); }
+    if (options::useImu() || options::initialize_flag) { options::kImuTopic = yaml_helper.get<std::string>("imu_topic"); }
     if (options::useKinematics()) { options::kKinematicTopic = yaml_helper.get<std::string>("kinematic_topic"); }
 
     kilo_ = std::make_unique<KILO>(config_file);
@@ -85,6 +87,26 @@ bool RosInterface::initParamAndReset(const std::string& config_file) {
 
     pub_joint_tf_enable_ = options::useKinematics() ? yaml_helper.get<bool>("pub_joint_tf_enable", false) : false;
     return true;
+}
+
+void RosInterface::initialization() {
+    // Initialization logic here
+    if(!options::initialize_flag || imu_cache_.size() < 2 * 200) return;
+
+    static double init_time = ros_compat::toSec(imu_cache_.front()->header.stamp);
+    std::vector<Eigen::Vector3d> acc_vec_;
+    while(!imu_cache_.empty())
+    {
+        double imu_time = ros_compat::toSec(imu_cache_.front()->header.stamp);
+        if(imu_time - init_time > 2.0) break;
+        Eigen::Vector3d acc(imu_cache_.front()->linear_acceleration.x, imu_cache_.front()->linear_acceleration.y, imu_cache_.front()->linear_acceleration.z);
+        acc_vec_.push_back(acc);
+        imu_cache_.pop_front();
+    }
+    Eigen::Quaterniond q = GravityAlign(acc_vec_);
+    Eigen::Matrix3d R = q.toRotationMatrix();
+    lidar_processing_->updateExtrinsics(R);
+    init_finished_ = true;
 }
 
 void RosInterface::createPublishers() {
@@ -118,7 +140,7 @@ void RosInterface::subscribeLidar() {
 }
 
 void RosInterface::subscribeImu() {
-    if (!options::useImu()) return;
+    if (!options::useImu() && !options::initialize_flag) return;
 
     using std::placeholders::_1;
     imu_node_ = createSubscriptionNode(node_, std::string(node_->get_name()) + "_imu_sub");
@@ -253,6 +275,8 @@ void RosInterface::livoxLidarCallBack(ros_compat::LivoxCustomMsgConstPtr msg) {
 }
 
 void RosInterface::imuCallBack(ros_compat::ImuMsgConstPtr msg) {
+    if(init_finished_ && !options::useImu()) return;
+
     static ros_compat::ImuMsg last_imu_msg;
     ros_compat::ImuMsgPtr imu_msg(new ros_compat::ImuMsg(*msg));
 
@@ -494,7 +518,7 @@ void RosInterface::publishPointcloudWorld(const double end_time, const CloudPtr&
     pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZINormal>());
     pcl::VoxelGrid<pcl::PointXYZINormal> sor;
     sor.setInputCloud(cloud_copy);
-    sor.setLeafSize(0.1f, 0.1f, 0.1f);
+    sor.setLeafSize(0.05f, 0.05f, 0.05f);
     sor.filter(*cloud_filtered);
     
     pcl::toROSMsg(*cloud_filtered, pcl_msg);
@@ -505,6 +529,12 @@ void RosInterface::publishPointcloudWorld(const double end_time, const CloudPtr&
 
 void RosInterface::run() {
     if (slam_stopped_.load(std::memory_order_acquire)) return;
+    if(!init_finished_) {
+        this->initialization();
+        lidar_cache_.clear();
+        kin_imu_cache_.clear();
+        return;
+    }
     if (!this->syncPackage()) return;
 
     ProcessResult process_result = kilo_->process(measure_);

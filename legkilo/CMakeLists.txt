@@ -108,6 +108,7 @@ endif()
 
 set(CORE_SOURCES
     # Preprocessing modules
+    src/preprocess/imu_processing.cc
     src/preprocess/lidar_processing.cc
     src/preprocess/kinematics.cc
     

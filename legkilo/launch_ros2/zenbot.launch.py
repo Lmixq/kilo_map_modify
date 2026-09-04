@@ -8,7 +8,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     package_share = FindPackageShare("legkilo")
     config_file = LaunchConfiguration("config_file")
-    legkilo_robot_rviz = PathJoinSubstitution([package_share, "rviz", "legkilo_robot.rviz"])
+    legkilo_robot_rviz = PathJoinSubstitution([package_share, "rviz", "zenbot.rviz"])
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -22,14 +22,14 @@ def generate_launch_description():
                 output="screen",
                 arguments=["--config_file", config_file],
             ),
-            # Node(
-            #     package="rviz2",
-            #     executable="rviz2",
-            #     name="rviz",
-            #     output="screen",
-            #     arguments=["-d", legkilo_robot_rviz],
-            #     prefix="nice",
-            # )
+            Node(
+                package="rviz2",
+                executable="rviz2",
+                name="rviz",
+                output="screen",
+                arguments=["-d", legkilo_robot_rviz],
+                prefix="nice",
+            )
             #
             # Node(
             #     package="robot_state_publisher",

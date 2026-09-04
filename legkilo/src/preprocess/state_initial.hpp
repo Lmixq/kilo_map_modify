@@ -15,7 +15,7 @@
 
 namespace legkilo {
 
-enum class InitType { Identity = 1, GravityAlignment = 2 };
+enum class InitType { Identity = 1, GravityAlignment = 2, Calibration = 3 };
 
 class StateInitial {
    public:

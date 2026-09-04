@@ -116,6 +116,7 @@ class LidarProcessing {
     common::LidarType getLidarType() const;
     void processing(const ros_compat::PointCloud2MsgConstPtr& msg, common::LidarScan& lidar_scan);
     void processing(const ros_compat::LivoxCustomMsgConstPtr& msg, common::LidarScan& lidar_scan);
+    void updateExtrinsics(const Eigen::Matrix3d& R);
 
     template <typename T>
     inline bool rangeCheck(const T& p) {

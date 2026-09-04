@@ -65,7 +65,9 @@ class RosInterface {
     bool syncPackage();
     void publishOdomTFPath(double end_time, const Eigen::Vector3d& pos, const Eigen::Matrix3d& rot);
     void publishPointcloudWorld(double end_time, const CloudPtr& cloud_world);
+    void initialization();
 
+    bool init_finished_ = false;
     std::shared_ptr<rclcpp::Node> node_;
     std::shared_ptr<rclcpp::Node> lidar_node_;
     std::shared_ptr<rclcpp::Node> imu_node_;

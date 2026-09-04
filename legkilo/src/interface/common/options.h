@@ -19,6 +19,7 @@ extern std::string kImuTopic;
 extern common::SensorType kSensorType;
 extern std::atomic_bool FLAG_EXIT;
 extern bool kRedundancy;
+extern bool initialize_flag;
 
 inline bool useImu() { return common::usesImu(kSensorType); }
 
