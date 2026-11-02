@@ -18,6 +18,7 @@
 #include "common/pcl_types.h"
 #include "common/sensor_types.hpp"
 #include "interface/common/ros_compat.h"
+#include "preprocess/imu_processing.h"
 namespace legkilo {
 class ESKF;
 class StateInitial;
@@ -61,6 +62,8 @@ class KILO {
 
     Mat3D getRotLidar() const;
 
+    void updateTrans(Mat3D trans);
+
    private:
     void initializeFromYaml(const std::string& config_file);
 
@@ -88,6 +91,8 @@ class KILO {
 
     void updateLoPredictInput(double current_time);
 
+    bool zupt();
+
    private:
     // Modules
     std::unique_ptr<ESKF> eskf_;
@@ -114,6 +119,8 @@ class KILO {
     double last_state_predict_time_ = 0.0;
     double last_state_update_time_ = 0.0;
     bool init_flag_ = true;
+    bool init_static_state_ = true;
+    std::deque<std::deque<ros_compat::ImuMsgPtr>> init_imus_vec_;
 
     // LO-mode predict input estimated from the last two corrected states.
     Vec3D lo_predict_world_vel_ = Vec3D::Zero();
@@ -126,6 +133,7 @@ class KILO {
     // Extrinsics and downsampling
     Mat3D ext_rot_ = Mat3D::Identity();
     Vec3D ext_t_ = Vec3D::Zero();
+    Mat3D gravity_algin_trans = Mat3D::Identity();
 };
 
 }  // namespace legkilo

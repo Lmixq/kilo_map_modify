@@ -12,6 +12,9 @@ message(STATUS "CMake build type: ${CMAKE_BUILD_TYPE}")
 
 add_definitions(-DROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/\")
 
+set(IRIDESCENCE_SRC_DIR "${PROJECT_SOURCE_DIR}/thirdparty/iridescence")
+set(IRIDESCENCE_TP_DIR "${PROJECT_SOURCE_DIR}/thirdparty/iridescence/thirdparty")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -63,6 +66,14 @@ include(cmake/kiss_matcher.cmake)
 
 include_directories(
     src
+    ${IRIDESCENCE_SRC_DIR}
+    ${IRIDESCENCE_TP_DIR}/imgui
+    ${IRIDESCENCE_TP_DIR}/imgui/backends
+    ${IRIDESCENCE_TP_DIR}/ImGuizmo
+    ${IRIDESCENCE_TP_DIR}/implot
+    ${IRIDESCENCE_TP_DIR}/portable-file-dialogs
+    ${IRIDESCENCE_TP_DIR}/gl3w
+    ${IRIDESCENCE_TP_DIR}/rapidhash
     ${EIGEN3_INCLUDE_DIRS}
     ${PCL_INCLUDE_DIRS}
     ${yaml-cpp_INCLUDE_DIRS}
@@ -190,13 +201,31 @@ if(NOT SMALL_GICP_ONLY_HEADER)
 endif()
 
 add_executable(${PROJECT_NAME}_node ${NODE_SOURCE})
-target_link_libraries(${PROJECT_NAME}_node
-    PRIVATE
-    ${PROJECT_NAME}.lib
-)
+
+if(IRIDESCENCE_VIEWER)
+  target_link_libraries(${PROJECT_NAME}_node
+      PRIVATE
+      iridescence
+      ${PROJECT_NAME}.lib
+  )
+else()
+  target_link_libraries(${PROJECT_NAME}_node
+      PRIVATE
+      ${PROJECT_NAME}.lib
+  )
+endif()
 
 if(LEGKILO_RESOLVED_ROS_VERSION STREQUAL "2")
-  install(TARGETS ${PROJECT_NAME}_node
+  add_executable(goal_point_sub src/goal_point_sub/goal_point_sub.cpp)
+  ament_target_dependencies(goal_point_sub
+    PUBLIC
+    rclcpp
+    geometry_msgs
+  )
+
+  add_subdirectory(waypoint_rviz_plugin)
+
+  install(TARGETS ${PROJECT_NAME}_node goal_point_sub
     DESTINATION lib/${PROJECT_NAME}
   )
 

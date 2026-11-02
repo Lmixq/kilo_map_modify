@@ -112,6 +112,10 @@ class RosInterface {
     bool init_flag_ = true;
     std::atomic_bool slam_stopped_{false};
     bool pub_joint_tf_enable_ = true;
+
+    CloudPtr global_cloud_ = pcl_utils::makeCloud<PointType>();
+    bool save_result_enable_ = true;
+    std::string save_path_;
 };
 
 }  // namespace legkilo

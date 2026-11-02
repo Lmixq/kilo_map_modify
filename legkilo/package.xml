@@ -36,6 +36,7 @@
   <depend condition="$ROS_VERSION == 2">tf2</depend>
   <depend condition="$ROS_VERSION == 2">tf2_ros</depend>
   <depend condition="$ROS_VERSION == 2">pcl_conversions</depend>
+  <depend condition="$ROS_VERSION == 2">waypoint_rviz_plugin</depend>
   <exec_depend condition="$ROS_VERSION == 2">launch_ros</exec_depend>
 
   <export>

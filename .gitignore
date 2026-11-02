@@ -12,3 +12,5 @@ legkilo/result/PCD/*
 !legkilo/result/PCD/.gitignore
 legkilo/thirdparty/oneapi-tbb-2022.2.0-lin
 legkilo/script/*
+legkilo/PCD/*
+*.pcd

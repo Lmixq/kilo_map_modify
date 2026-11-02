@@ -10,7 +10,7 @@ redundancy: true                  ## set true for legkilo dataset (imu/kin publi
 # Initialization (Require stationary state at the beginning)
 gravity: 9.81 
 init_type: 1                      ## 1: Identity (R=I, g from mean acc); 2: GravityAlignment (R aligns acc to world gravity, g=[0,0,-G]))
-initialize_flag: true                  ## whether to initialize the extrincs between lidar and body (require stationary state at the beginning)
+initialize_flag: true             ## whether to initialize the extrincs between lidar and body (require stationary state at the beginning)
 
 # Extrinsic: rigid body transform from LiDAR frame to IMU frame (T_I_L)
 # meaning: LiDAR coordinate system expressed in IMU coordinate system
@@ -23,7 +23,7 @@ time_scale: 1e-9                  ## point sampling time scale relative to [sec]
 min_range: 1.5                    ## min range for valid points [m]
 max_range: 150.0                  ## max range for valid points [m]
 filter_num: 1                     ## number of points to filter
-voxel_grid_resolution: 0.5        ## voxel grid resolution for point cloud downsampling [m]
+voxel_grid_resolution: 0.1        ## voxel grid resolution for point cloud downsampling [m]
 voxel_grid_mode: 1                ## 0: MedianRepresentative, 1: RandomPerVoxelQuota (detail in the comment of common/voxel_grid.h)
 voxel_grid_target_num: 3000       ## target number of points after voxel grid downsampling (only for RandomPerVoxelQuota)
 voxel_grid_overshoot: 1.5         ## overshoot factor for RandomPerVoxelQuota ( the points num exceed overshoot * target_num will be resized)
@@ -79,3 +79,6 @@ imu_gyr_meas_noise: 0.01          ## gyroscope measurement noise
 kin_meas_noise: 0.5               ## kinematic measurement noise
 p2plane_kernel_threshold: 5.0     ## point-to-plane kernel threshold
 ndt_kernel_threshold: 5.0         ## NDT kernel threshold
+
+# Result
+save_result_enable: true          ## whether save result to disk

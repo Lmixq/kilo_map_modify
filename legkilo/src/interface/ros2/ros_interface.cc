@@ -56,7 +56,8 @@ bool RosInterface::initParamAndReset(const std::string& config_file) {
     options::kLidarTopic = yaml_helper.get<std::string>("lidar_topic");
     options::kSensorType = common::parseSensorType(yaml_helper.get<std::string>("sensor_type"));
     options::kRedundancy = yaml_helper.get<bool>("redundancy", false);
-    if (options::useImu() || options::initialize_flag) { options::kImuTopic = yaml_helper.get<std::string>("imu_topic"); }
+    // if (options::useImu() || options::initialize_flag) { options::kImuTopic = yaml_helper.get<std::string>("imu_topic"); }
+    options::kImuTopic = yaml_helper.get<std::string>("imu_topic");
     if (options::useKinematics()) { options::kKinematicTopic = yaml_helper.get<std::string>("kinematic_topic"); }
 
     kilo_ = std::make_unique<KILO>(config_file);
@@ -86,6 +87,10 @@ bool RosInterface::initParamAndReset(const std::string& config_file) {
     lidar_processing_ = std::make_unique<LidarProcessing>(lidar_process_config);
 
     pub_joint_tf_enable_ = options::useKinematics() ? yaml_helper.get<bool>("pub_joint_tf_enable", false) : false;
+
+    save_result_enable_ = yaml_helper.get<bool>("save_result_enable", true);
+    std::string root_dir = ROOT_DIR;
+    save_path_ = root_dir + "/PCD/result.pcd";
     return true;
 }
 
@@ -104,6 +109,7 @@ void RosInterface::initialization() {
         imu_cache_.pop_front();
     }
     Eigen::Quaterniond q = GravityAlign(acc_vec_);
+    q.normalize();
     Eigen::Matrix3d R = q.toRotationMatrix();
     lidar_processing_->updateExtrinsics(R);
     init_finished_ = true;
@@ -140,7 +146,7 @@ void RosInterface::subscribeLidar() {
 }
 
 void RosInterface::subscribeImu() {
-    if (!options::useImu() && !options::initialize_flag) return;
+    // if (!options::useImu() && !options::initialize_flag) return;
 
     using std::placeholders::_1;
     imu_node_ = createSubscriptionNode(node_, std::string(node_->get_name()) + "_imu_sub");
@@ -238,6 +244,12 @@ void RosInterface::stopSlam() {
         backend_->stop();
         LOG(INFO) << "Backend stopped";
     }
+
+    if(save_result_enable_)
+    {
+        pcl::io::savePCDFileBinary(save_path_, *global_cloud_);
+        LOG(INFO) << "Saved global cloud to " << save_path_;
+    }
 }
 
 void RosInterface::lidarCallBack(ros_compat::PointCloud2MsgConstPtr msg) {
@@ -275,7 +287,7 @@ void RosInterface::livoxLidarCallBack(ros_compat::LivoxCustomMsgConstPtr msg) {
 }
 
 void RosInterface::imuCallBack(ros_compat::ImuMsgConstPtr msg) {
-    if(init_finished_ && !options::useImu()) return;
+    // if(init_finished_ && !options::useImu()) return;
 
     static ros_compat::ImuMsg last_imu_msg;
     ros_compat::ImuMsgPtr imu_msg(new ros_compat::ImuMsg(*msg));
@@ -303,6 +315,8 @@ void RosInterface::imuCallBack(ros_compat::ImuMsgConstPtr msg) {
 }
 
 void RosInterface::kinematicImuCallBack(const robotdata::msg::RobotState::ConstSharedPtr& msg) {
+    static int count = 0;
+    count++;
     static robotdata::msg::RobotState last_lowstate_msg;
     robotdata::msg::RobotState lowstate_msg;
     lowstate_msg = *msg; 
@@ -328,6 +342,12 @@ void RosInterface::kinematicImuCallBack(const robotdata::msg::RobotState::ConstS
         common::KinImuMeas kin_imu_meas;
 
         kinematics_->processing(lowstate_msg, kin_imu_meas);
+
+        // if(count >= 10){
+        //     std::cout << " the z of FR: " << kin_imu_meas.foot_pos_[0][2] << " the z of FL: " << kin_imu_meas.foot_pos_[1][2] << 
+        //                 " the z of RR: " << kin_imu_meas.foot_pos_[2][2] << " the z of RL: " << kin_imu_meas.foot_pos_[3][2] << std::endl; 
+        //     count = 0;  // 重置计数器
+        // }
 
         kin_imu_cache_.push_back(kin_imu_meas);
         last_timestamp_kin_imu_ = timestamp;
@@ -455,6 +475,7 @@ bool RosInterface::syncPackage() {
         if (last_timestamp_kin_imu_ < lidar_end_time_) { return false; }
 
         double kin_imu_time = kin_imu_cache_.front().time_stamp_;
+        double imu_time = ros_compat::toSec(imu_cache_.front()->header.stamp);
         measure_.imus_.clear();
         measure_.kin_imus_.clear();
         while ((!kin_imu_cache_.empty()) && (kin_imu_time < lidar_end_time_)) {
@@ -462,6 +483,12 @@ bool RosInterface::syncPackage() {
             if (kin_imu_time > lidar_end_time_) break;
             measure_.kin_imus_.push_back(kin_imu_cache_.front());
             kin_imu_cache_.pop_front();
+        }
+        while ((!imu_cache_.empty()) && (imu_time < lidar_end_time_)) {
+            imu_time = ros_compat::toSec(imu_cache_.front()->header.stamp);
+            if (imu_time > lidar_end_time_) break;
+            measure_.imus_.push_back(imu_cache_.front());
+            imu_cache_.pop_front();
         }
 
         lidar_cache_.pop_front();
@@ -520,6 +547,8 @@ void RosInterface::publishPointcloudWorld(const double end_time, const CloudPtr&
     sor.setInputCloud(cloud_copy);
     sor.setLeafSize(0.05f, 0.05f, 0.05f);
     sor.filter(*cloud_filtered);
+
+    *global_cloud_ += *cloud_world;
     
     pcl::toROSMsg(*cloud_filtered, pcl_msg);
     pcl_msg.header.stamp = ros_compat::fromSec(end_time);
@@ -533,6 +562,8 @@ void RosInterface::run() {
         this->initialization();
         lidar_cache_.clear();
         kin_imu_cache_.clear();
+
+        global_cloud_->clear();
         return;
     }
     if (!this->syncPackage()) return;

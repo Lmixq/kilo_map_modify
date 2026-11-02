@@ -134,6 +134,10 @@ void KILO::initializeFromYaml(const std::string& config_file) {
     float vg_overshoot = yaml_helper.get<float>("voxel_grid_overshoot", 1.5f);
     voxel_grid_ = std::make_unique<VoxelGrid>(voxel_grid_resolution, static_cast<SamplingMode>(vg_mode), vg_target,
                                               vg_overshoot, 42);
+
+    gravity_algin_trans << 0.0101165, 0.770589,   0.637252,
+                            -0.999554, -0.0101165,  0.0281012,
+                            0.0281012, -0.637252,   0.770143;
 }
 
 GaussCloudPtr KILO::initializeMap(const CloudPtr& cloud_lidar) {
@@ -513,6 +517,82 @@ bool KILO::predictUpdateKinImu(const common::KinImuMeas& kin_imu) {
     return true;
 }
 
+void KILO::updateTrans(Mat3D trans)
+{
+    gravity_algin_trans = trans;
+}
+
+bool KILO::zupt() 
+{
+    constexpr double kGravity = 9.81;
+    constexpr double kAccelDiffThreshold = 0.05;  // mean_accel为1, m/s^2
+    constexpr double kGyroThreshold = 0.05;       // mean_gyro为0, rad/s
+    constexpr size_t kMinSamples = 5;
+
+    double accel_sum = 0.0;
+    double gyro_sum = 0.0;
+    size_t valid_count = 0;
+
+    std::vector<Eigen::Vector3d> acc_vec;
+    for (const auto& imu_que : init_imus_vec_) {
+        if (imu_que.empty()) continue;
+        for(const auto& imu_msg : imu_que) {
+            if (!imu_msg) {
+                std::cout << " imu_msg is null, skipping this message." << std::endl;
+                continue;
+            }
+            Eigen::Vector3d accel(imu_msg->linear_acceleration.x, imu_msg->linear_acceleration.y,
+                                  imu_msg->linear_acceleration.z);
+            acc_vec.push_back(accel);
+        }
+    }
+    Eigen::Quaterniond q = GravityAlign(acc_vec);
+    q.normalize();
+    gravity_algin_trans = q.toRotationMatrix();
+
+    std::cout << " in zupt function, init_imus_vec_ size: " << init_imus_vec_.size() << std::endl;
+    for (const auto& imu_que : init_imus_vec_) {
+        std::cout << " imu_que size: " << imu_que.size() << std::endl;
+        if (imu_que.empty()) continue;
+        for(const auto& imu_msg : imu_que) {
+            if (!imu_msg) {
+                std::cout << " imu_msg is null, skipping this message." << std::endl;
+                continue;
+            }
+            Eigen::Vector3d accel(imu_msg->linear_acceleration.x, imu_msg->linear_acceleration.y,
+                                  imu_msg->linear_acceleration.z);
+            Eigen::Vector3d gyro(imu_msg->angular_velocity.x, imu_msg->angular_velocity.y,
+                                 imu_msg->angular_velocity.z);
+            Eigen::Vector3d accel_trans = gravity_algin_trans * accel;
+            Eigen::Vector3d gyro_trans = gravity_algin_trans * gyro;
+
+            const double accel_norm = std::sqrt(accel_trans(0) * accel_trans(0) +
+                                                accel_trans(1) * accel_trans(1) +
+                                                accel_trans(2) * accel_trans(2));
+            const double gyro_norm = std::sqrt(gyro_trans(0) * gyro_trans(0) +
+                                               gyro_trans(1) * gyro_trans(1) +
+                                               gyro_trans(2) * gyro_trans(2));
+
+            accel_sum += accel_norm;
+            gyro_sum += gyro_norm;
+            ++valid_count;
+        }
+    }
+
+    std::cout << "Valid IMU samples: " << valid_count << std::endl;
+    const double mean_accel = accel_sum / static_cast<double>(valid_count);
+    const double mean_gyro = gyro_sum / static_cast<double>(valid_count);
+    std::cout << "Mean Acceleration: " << mean_accel << ", Mean Gyroscope: " << mean_gyro << std::endl;
+    const bool is_stationary = (std::abs(mean_accel - 1.0) < kAccelDiffThreshold) && (mean_gyro < kGyroThreshold);
+
+    if (is_stationary) {
+        std::cout << " the robot is stationary " << std::endl;
+        return true;
+    }
+    return false;
+}
+
+
 ProcessResult KILO::process(common::MeasGroup& measure) {
     ProcessResult result;
 
@@ -571,6 +651,26 @@ ProcessResult KILO::process(common::MeasGroup& measure) {
         result.cloud_body = cloud_down_body;
         result.match_types = std::make_shared<LidarMatchTypes>(cloud_down_lidar->size(), LidarMatchType::Unused);
         return result;
+    }
+
+    if(init_static_state_)
+    {
+        // std::deque<ros_compat::ImuMsgPtr> imus_que = measure.imus_;
+        init_imus_vec_.push_back(measure.imus_);
+        if(init_imus_vec_.size() < 10){
+            LOG(WARNING) << "Initializing static state, waiting for more IMU data.";
+            return result;
+        }
+        if(zupt()){
+            eskf_->state().pos_ = Vec3D(0.01, 0.01, 0.01);
+            eskf_->state().rot_ = state_initial_->initRotation();
+            eskf_->state().bw_ = state_initial_->gyroBias();
+            eskf_->cov() = 0.000001 * StateCov::Identity();
+
+            init_static_state_ = false;
+            LOG(INFO) << "Static state initialized.";
+        }
+        init_imus_vec_.pop_front();
     }
 
     // Prepare per-point var storage
