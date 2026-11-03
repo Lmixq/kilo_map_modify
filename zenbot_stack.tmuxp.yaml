@@ -1,0 +1,41 @@
+# tmuxp config: zenbot-dog robot stack (4 windows)
+# On robot (installed at ~/.tmuxp/zenbot_stack.yaml):
+#   tmuxp load zenbot_stack
+#
+# NOTE: DISPLAY/XAUTHORITY assume the desktop X session on vt2.
+# After a reboot re-check with:
+#   ps aux | grep Xorg          (look for -auth path)
+#   ls /tmp/.X11-unix/          (X1 -> DISPLAY=:1)
+session_name: zenbot_stack
+windows:
+  - window_name: livox
+    panes:
+      - shell_command:
+          - source ~/code/robotdata_bridge_test/rtEnvSetup.bash
+          - export DISPLAY=:1 XAUTHORITY=/run/user/1000/gdm/Xauthority
+          - cd /home/zenbot-dog/driver/livox_driver_s
+          - source install/setup.bash
+          - ros2 launch livox_ros_driver2 msg_MID360s_launch.py
+  - window_name: mapping
+    panes:
+      - shell_command:
+          - source ~/code/robotdata_bridge_test/rtEnvSetup.bash
+          - export DISPLAY=:1 XAUTHORITY=/run/user/1000/gdm/Xauthority
+          - sleep 10
+          - cd /home/zenbot-dog/code/slam/leg_kilo_map
+          - source install/setup.bash
+          - ros2 launch legkilo zenbot.launch.py
+  - window_name: planner
+    panes:
+      - shell_command:
+          - source ~/code/robotdata_bridge_test/rtEnvSetup.bash
+          - export DISPLAY=:1 XAUTHORITY=/run/user/1000/gdm/Xauthority
+          - /home/zenbot-dog/code/planner/autonomy_stack_zenbot/system_real_robot_with_route_planner_goals.sh
+  - window_name: controller
+    panes:
+      - shell_command:
+          - source ~/code/robotdata_bridge_test/rtEnvSetup.bash
+          - export DISPLAY=:1 XAUTHORITY=/run/user/1000/gdm/Xauthority
+          - cd /home/zenbot-dog/code/controller/dog_test
+          - source install/setup.bash
+          - ros2 run dg1_nav wz_spin_pub
